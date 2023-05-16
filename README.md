@@ -5,6 +5,8 @@ This is the base framework for students to complete Milestone 2 of the CS 152 fi
 
 Install libraries
 ```
+python3 -m pip install requests
+python3 -m pip install discord.py
 python3 -m pip install alt-profanity-check
 python3 -m pip install scipy
 ```
