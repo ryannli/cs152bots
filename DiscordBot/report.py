@@ -85,11 +85,11 @@ class Report:
         
         if self.state == State.MESSAGE_IDENTIFIED:
             if (Report.SPAM_KEYWORD in message.content):
-                self.state = State.SELECT_SPAM
+                self.state = State.REPORT_COMPLETE
                 await self.send_mod_message(f"{Report.SPAM_KEYWORD}")
                 return ["Thank you for helping to keep our platform safe. We will investigate this report. "]
             if (Report.OFFENSIVE_KEYWORD in message.content):
-                self.state = State.SELECT_OFFENSIVE
+                self.state = State.REPORT_COMPLETE
                 await self.send_mod_message(f"{Report.OFFENSIVE_KEYWORD}")
                 return ["Thank you for reporting. We will investigate to determine whether this content violates our policies. "]
             if (Report.HARASSMENT_KEYWORD in message.content):
@@ -102,11 +102,11 @@ class Report:
                 reply += f"  `{Report.HATE_SPEECH_KEYWORD}`\n"
                 return [reply]
             if (Report.ILLEGAL_KEYWORD in message.content):
-                self.state = State.SELECT_ILLEGAL
+                self.state = State.REPORT_COMPLETE
                 await self.send_mod_message(f"{Report.ILLEGAL_KEYWORD}")
                 return ["Thank you for reporting. We will investigate to determine whether this content warrants removal and/or referral to law enforcement. "]
             if (Report.DANGER_KEYWORD in message.content):
-                self.state = State.SELECT_IMMINENT
+                self.state = State.REPORT_COMPLETE
                 await self.send_mod_message(f"{Report.DANGER_KEYWORD}")
                 return ["Thank you for reporting. We take threats to people’s safety very seriously and our moderation team will review this report. If you believe you are in immediate danger, you should also contact local law enforcement."]
             return ["Wrong input. Please select the reason again."]
