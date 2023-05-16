@@ -8,6 +8,7 @@ import re
 import requests
 from report import Report
 import pdb
+import profanity_check
 
 # Set up logging to the console
 logger = logging.getLogger('discord')
@@ -70,6 +71,9 @@ class ModBot(discord.Client):
         else:
             await self.handle_dm(message)
 
+    async def on_message_edit(self, before, after):
+        await self.on_message(after)
+        
     async def handle_dm(self, message):
         # Handle a help message
         if message.content == Report.HELP_KEYWORD:
@@ -102,6 +106,11 @@ class ModBot(discord.Client):
         # Only handle messages sent in the "group-#" channel
         if not message.channel.name == f'group-{self.group_num}':
             return
+
+        # Automatically detects if the content is harmful.
+        if (profanity_check.predict_prob([message.content])[0] > 0.9):
+            await message.delete()
+            await message.channel.send(f'Deleted offensive message from {message.author.name}. Please be respectful for community guidelines')
 
         # Forward the message to the mod channel
         mod_channel = self.mod_channels[message.guild.id]
