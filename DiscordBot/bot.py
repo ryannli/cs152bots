@@ -54,7 +54,8 @@ class ModBot(discord.Client):
             for channel in guild.text_channels:
                 if channel.name == f'group-{self.group_num}-mod':
                     self.mod_channels[guild.id] = channel
-        
+                    # A hack since we only use one mod channel
+                    self.single_mod_channel = channel
 
     async def on_message(self, message):
         '''
@@ -91,7 +92,7 @@ class ModBot(discord.Client):
 
         # If we don't currently have an active report for this user, add one
         if author_id not in self.reports:
-            self.reports[author_id] = Report(self)
+            self.reports[author_id] = Report(self, self.single_mod_channel)
 
         # Let the report class handle this message; forward all the messages it returns to uss
         responses = await self.reports[author_id].handle_message(message)
@@ -108,15 +109,17 @@ class ModBot(discord.Client):
             return
 
         # Automatically detects if the content is harmful.
-        if (profanity_check.predict_prob([message.content])[0] > 0.9):
+        scores = self.eval_text(message.content)
+        # Examples: "fuck you", "go to the hell"
+        if (scores > 0.95):
             await message.delete()
             await message.channel.send(f'Deleted offensive message from {message.author.name}. Please be respectful for community guidelines')
-
-        # Forward the message to the mod channel
-        mod_channel = self.mod_channels[message.guild.id]
-        await mod_channel.send(f'Forwarded message:\n{message.author.name}: "{message.content}"')
-        scores = self.eval_text(message.content)
-        await mod_channel.send(self.code_format(scores))
+        # Examples: "I hate that", "lets bully him"
+        elif (scores > 0.4):
+            # Forward the message to the mod channel
+            mod_channel = self.mod_channels[message.guild.id]
+            await mod_channel.send(f'Forwarded message:\n{message.author.name}: "{message.content}"')
+            await mod_channel.send(self.code_format("{:.2f}".format(scores)))
 
     
     def eval_text(self, message):
@@ -124,7 +127,7 @@ class ModBot(discord.Client):
         TODO: Once you know how you want to evaluate messages in your channel, 
         insert your code here! This will primarily be used in Milestone 3. 
         '''
-        return message
+        return profanity_check.predict_prob([message])[0]
 
     
     def code_format(self, text):
@@ -133,7 +136,7 @@ class ModBot(discord.Client):
         evaluated, insert your code here for formatting the string to be 
         shown in the mod channel. 
         '''
-        return "Evaluated: '" + text+ "'"
+        return "profanity_check score: '" + text + "'"
 
 
 client = ModBot()
