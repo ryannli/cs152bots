@@ -1,4 +1,4 @@
-# This class enables moderators to take actions to both manually and automatically reported messages.
+# This class enables moderators to review both manually and automatically reported messages.
 
 from enum import Enum, auto
 import discord
@@ -13,7 +13,7 @@ class State(Enum):
     CONTENT_IS_HARASSMENT = auto()
     REVIEW_COMPLETED = auto()
 
-class Mod:
+class Review:
     START_KEYWORD = "review"
     CANCEL_KEYWORD = "cancel"
     HELP_KEYWORD = "help"
@@ -103,5 +103,5 @@ class Mod:
         
         return ["Wrong input. Please select the reason again."]
     
-    def get_state_of_review(self):
-        return self.state
+    def review_complete(self):
+        return self.state == State.REVIEW_COMPLETED
