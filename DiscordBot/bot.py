@@ -40,7 +40,7 @@ class ModBot(discord.Client):
         print(f'{self.user.name} has connected to Discord! It is these guilds:')
         for guild in self.guilds:
             print(f' - {guild.name}')
-        print('Press Ctrl-C to quit.')
+        print('Press Ctrl-C to quit.\n')
 
         # Parse the group number out of the bot's name
         match = re.search('[gG]roup (\d+) [bB]ot', self.user.name)
@@ -73,9 +73,15 @@ class ModBot(discord.Client):
             await self.handle_dm(message)
 
     async def on_message_edit(self, before, after):
+        print(f"{before.author.name} edited a previously sent message.")
+        print(f"The old message: '{before.content}'")
+        print(f"The new message: '{after.content}'\n")
         await self.on_message(after)
         
     async def handle_dm(self, message):
+        print(f"The discord bot has detected a new dm from {message.author.name}")
+        print(f"The message content: '{message.content}' \n")
+
         # Handle a help message
         if message.content == Report.HELP_KEYWORD:
             reply =  "Use the `report` command to begin the reporting process.\n"
@@ -104,6 +110,9 @@ class ModBot(discord.Client):
             self.reports.pop(author_id)
 
     async def handle_channel_message(self, message):
+        print(f"The discord bot has detected a new message from {message.author.name} in {message.guild.name}")
+        print(f"The message content: '{message.content}' \n")
+
         # Only handle messages sent in the "group-#" channel
         if not message.channel.name == f'group-{self.group_num}':
             return
