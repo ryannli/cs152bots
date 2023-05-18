@@ -18,12 +18,11 @@ class Mod:
     CANCEL_KEYWORD = "cancel"
     HELP_KEYWORD = "help"
 
-    def __init__(self, client, mod_channel):
+    def __init__(self, client):
         self.state = State.REVIEW_START
         self.client = client
         self.auto_reported = None
         self.reported_message = None
-        self.mod_channel = mod_channel
         self.review_flow = ""
 
     async def handle_message(self, message):
