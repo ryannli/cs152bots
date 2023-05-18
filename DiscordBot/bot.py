@@ -7,6 +7,7 @@ import logging
 import re
 import requests
 from report import Report
+from review import Review
 import pdb
 import profanity_check
 
@@ -35,6 +36,8 @@ class ModBot(discord.Client):
         self.group_num = None
         self.mod_channels = {} # Map from guild to the mod channel id for that guild
         self.reports = {} # Map from user IDs to the state of their report
+        self.reviews = {} # Map from user IDs to the state of their reviews
+        self.mods = [1029345335748857917] # user IDs that are allowed to post / review messages in mod channel. 3q
 
     async def on_ready(self):
         print(f'{self.user.name} has connected to Discord! It is these guilds:')
@@ -113,23 +116,63 @@ class ModBot(discord.Client):
         print(f"The discord bot has detected a new message from {message.author.name} in {message.guild.name}")
         print(f"The message content: '{message.content}' \n")
 
-        # Only handle messages sent in the "group-#" channel
-        if not message.channel.name == f'group-{self.group_num}':
-            return
+        # Anyone can post within this channel. Note that messages in this channel can be 
+        # manually or automatically reported. Once reported, those messages are forwarded
+        # to the moderator channel for review.
+        if message.channel.name == f'group-{self.group_num}':
 
-        # Automatically detects if the content is harmful.
-        scores = self.eval_text(message.content)
-        # Examples: "fuck you", "go to the hell"
-        if (scores > 0.95):
-            await message.delete()
-            await message.channel.send(f'Deleted offensive message from {message.author.name}. Please be respectful for community guidelines')
-        # Examples: "I hate that", "lets bully him"
-        elif (scores > 0.4):
-            # Forward the message to the mod channel
-            mod_channel = self.mod_channels[message.guild.id]
-            await mod_channel.send(f'Forwarded message:\n{message.author.name}: "{message.content}"')
-            await mod_channel.send(self.code_format("{:.2f}".format(scores)))
+            scores = self.eval_text(message.content)
+            
+            # Blatantly harmful messages don't need to be reviewed. "fuck you" is an example of such a message.
+            if (scores > 0.95):
+                await message.delete()
+                await message.channel.send(f'Deleted offensive message from {message.author.name}. Please be respectful for community guidelines.')
 
+            # Ambigious messages need to be reviewed. "I hate that" is an example of such a message.
+            elif (scores > 0.4):
+                mod_channel = self.mod_channels[message.guild.id]
+                await mod_channel.send(f'Forwarded message:\n{message.author.name}: "{message.content}"')
+                await mod_channel.send(self.code_format("{:.2f}".format(scores)))
+
+            # TODO: Users need to be able to trigger the report flow from the group-21 channel. Currently,
+            # users are only able to trigger the report flow from DMs (as seen in handle_dm())
+        
+        # Only mods can post within this channel. Note that besides the messages posted by mods,
+        # this channel will contain all the reported messages that were forwarded either manually
+        # or automatically.
+        if message.channel.name == f'group-{self.group_num}-mod':
+            if message.author.id not in self.mods:
+                print(f"{message.author.name} is not a moderator. Their message was deleted.")
+                await message.delete()
+                return
+            
+            author_id = message.author.id
+            responses = []
+
+            # Only respond to messages if they're part of a review flow
+            if author_id not in self.reviews and not message.content.startswith(Review.START_KEYWORD):
+                return
+
+            # If we don't currently have an active review for this user, add one
+            if author_id not in self.reviews:
+                self.reviews[author_id] = Review(self)
+
+            # Let the moderator class handle this message; forward all the messages it returns to us
+            responses = await self.reviews[author_id].handle_message(message)
+
+            # Note that the final response is just the message that was reviewed.
+            # Thus, we can't print out the message object, we need to print out the review flow.
+            if self.reviews[author_id].review_complete():
+                review_flow = self.reviews[author_id].review_flow_to_string()
+
+                # We only want to send a review flow that was completed (not one that was partially completed, but
+                # then the user canceled the review).
+                if review_flow:
+                    await message.channel.send(review_flow)   
+                self.reviews.pop(author_id)
+            else: 
+                for r in responses:
+                    await message.channel.send(r)
     
     def eval_text(self, message):
         ''''
