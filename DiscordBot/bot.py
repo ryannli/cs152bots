@@ -85,32 +85,7 @@ class ModBot(discord.Client):
         print(f"The discord bot has detected a new dm from {message.author.name}")
         print(f"The message content: '{message.content}' \n")
 
-        # Handle a help message
-        if message.content == Report.HELP_KEYWORD:
-            reply =  "Use the `report` command to begin the reporting process.\n"
-            reply += "Use the `cancel` command to cancel the report process.\n"
-            await message.channel.send(reply)
-            return
-
-        author_id = message.author.id
-        responses = []
-
-        # Only respond to messages if they're part of a reporting flow
-        if author_id not in self.reports and not message.content.startswith(Report.START_KEYWORD):
-            return
-
-        # If we don't currently have an active report for this user, add one
-        if author_id not in self.reports:
-            self.reports[author_id] = Report(self, self.single_mod_channel)
-
-        # Let the report class handle this message; forward all the messages it returns to uss
-        responses = await self.reports[author_id].handle_message(message)
-        for r in responses:
-            await message.channel.send(r)
-
-        # If the report is complete or cancelled, remove it from our map
-        if self.reports[author_id].report_complete():
-            self.reports.pop(author_id)
+        await self.report_flow(message)
 
     async def handle_channel_message(self, message):
         print(f"The discord bot has detected a new message from {message.author.name} in {message.guild.name}")
@@ -134,8 +109,7 @@ class ModBot(discord.Client):
                 await mod_channel.send(f'Forwarded message:\n{message.author.name}: "{message.content}"')
                 await mod_channel.send(self.code_format("{:.2f}".format(scores)))
 
-            # TODO: Users need to be able to trigger the report flow from the group-21 channel. Currently,
-            # users are only able to trigger the report flow from DMs (as seen in handle_dm())
+            await self.report_flow(message)
         
         # Only mods can post within this channel. Note that besides the messages posted by mods,
         # this channel will contain all the reported messages that were forwarded either manually
@@ -173,6 +147,34 @@ class ModBot(discord.Client):
             else: 
                 for r in responses:
                     await message.channel.send(r)
+
+    async def report_flow(self, message):
+        # Handle a help message
+        if message.content == Report.HELP_KEYWORD:
+            reply =  "Use the `report` command to begin the reporting process.\n"
+            reply += "Use the `cancel` command to cancel the report process.\n"
+            await message.channel.send(reply)
+            return
+
+        author_id = message.author.id
+        responses = []
+
+        # Only respond to messages if they're part of a reporting flow
+        if author_id not in self.reports and not message.content.startswith(Report.START_KEYWORD):
+            return
+
+        # If we don't currently have an active report for this user, add one
+        if author_id not in self.reports:
+            self.reports[author_id] = Report(self, self.single_mod_channel)
+
+        # Let the report class handle this message; forward all the messages it returns to us
+        responses = await self.reports[author_id].handle_message(message)
+        for r in responses:
+            await message.channel.send(r)
+
+        # If the report is complete or cancelled, remove it from our map
+        if self.reports[author_id].report_complete():
+            self.reports.pop(author_id)
     
     def eval_text(self, message):
         ''''
