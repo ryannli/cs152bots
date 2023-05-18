@@ -107,7 +107,7 @@ class Review:
     def review_flow_to_string(self):
         # The review_flow isn't complete if the review was canceled, rather then completed.
         if self.review_flow.endswith("->"):
-            return ""
+            return "Review canceled."
         parts = self.review_flow.split("->")
         reply =  "Your review of the following message is complete: ```" + self.reported_message.content + "```\n"
         step = 1
