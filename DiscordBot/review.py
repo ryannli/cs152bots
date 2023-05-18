@@ -94,11 +94,11 @@ class Review:
                 return [reply]
         if self.state == State.CONTENT_IS_HARASSMENT:
             self.review_flow += "author must be banned and post removed"
-            self.state = State.REVIEW_COMPLETE
+            self.state = State.REVIEW_COMPLETED
             return [self.reported_message, self.review_flow]
         if self.state == State.CONTENT_IS_NOT_HARASSMENT:
             self.review_flow += "content is not harassment, check for adverserial reporting"
-            self.state = State.REVIEW_COMPLETE
+            self.state = State.REVIEW_COMPLETED
             return [self.reported_message, self.review_flow]
         
         return ["Wrong input. Please select the reason again."]
