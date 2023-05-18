@@ -49,8 +49,6 @@ class Review:
             channel = guild.get_channel(int(m.group(2)))
             if not channel:
                 return ["It seems this channel was deleted or never existed. Please try again or say `cancel` to cancel."]
-            # Need to be within the moderator channel!
-            print(channel)
             try:
                 message = await channel.fetch_message(int(m.group(3)))
                 self.reported_message = message
@@ -58,7 +56,7 @@ class Review:
                 return ["It seems this message was deleted or never existed. Please try again or say `cancel` to cancel."]
             
             self.state = State.MESSAGE_IDENTIFIED
-            self.review_flow += "review of '" + message.content + "' has been started ->"
+            self.review_flow += "review has been started ->"
             reply = "I found this message: ```" + message.author.name + ": " + message.content + "```\n"
             reply += "Please make a determination below:\n"
             reply += f"  `1: Content is not harassment and does not violate policies.`\n"
@@ -86,7 +84,7 @@ class Review:
                     self.review_flow += "reviewer #2 says content is harassment ->"
                     self.state = State.CONTENT_IS_HARASSMENT
             else:
-                self.review_flow += "reviewer #2 is asked their opinion on uncertain content -> "
+                self.review_flow += "reviewer #2 is asked their opinion on uncertain content ->"
                 reply = "Please contact a team member and let them review the post."
                 reply += "Please enter their determination below:\n"
                 reply += f"  `A: Content is not harassment and does not violate policies.`\n"
@@ -95,13 +93,25 @@ class Review:
         if self.state == State.CONTENT_IS_HARASSMENT:
             self.review_flow += "author must be banned and post removed"
             self.state = State.REVIEW_COMPLETED
-            return [self.reported_message, self.review_flow]
+            return [self.reported_message]
         if self.state == State.CONTENT_IS_NOT_HARASSMENT:
             self.review_flow += "content is not harassment, check for adverserial reporting"
             self.state = State.REVIEW_COMPLETED
-            return [self.reported_message, self.review_flow]
+            return [self.reported_message]
         
         return ["Wrong input. Please select the reason again."]
     
     def review_complete(self):
         return self.state == State.REVIEW_COMPLETED
+    
+    def review_flow_to_string(self):
+        # The review_flow isn't complete if the review was canceled, rather then completed.
+        if self.review_flow.endswith("->"):
+            return ""
+        parts = self.review_flow.split("->")
+        reply =  "Your review of the following message is complete: ```" + self.reported_message.content + "```\n"
+        step = 1
+        for part in parts:
+            reply += f"{step}:  `{part}`\n"
+            step += 1
+        return reply
