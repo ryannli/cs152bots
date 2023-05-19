@@ -1,6 +1,9 @@
 from enum import Enum, auto
+import formatter
 import discord
 import re
+from collections import OrderedDict
+
 
 class State(Enum):
     REPORT_START = auto()
@@ -13,6 +16,7 @@ class State(Enum):
     SELECT_ILLEGAL = auto()
     SELECT_IMMINENT = auto()
     ASK_TO_BLOCK_SENDER = auto()
+
 
 class Report:
     START_KEYWORD = "report"
@@ -28,14 +32,16 @@ class Report:
     PRIVITE_KEYWORD = "revealing private information"
     HATE_SPEECH_KEYWORD = "hate speech targeting me"
 
-    def __init__(self, client, mod_channel):
+    def __init__(self, client, mod_channel, reporter_id):
         self.state = State.REPORT_START
         self.client = client
         self.message = None
         self.report_message = None
+        self.report_message_link = None
+        self.reporter_id = reporter_id
         self.mod_channel = mod_channel
         self.report_flow = ""
-    
+
     async def handle_message(self, message):
         '''
         This function makes up the meat of the user-side reporting flow. It defines how we transition between states and what 
@@ -46,15 +52,15 @@ class Report:
         if message.content == self.CANCEL_KEYWORD:
             self.state = State.REPORT_COMPLETE
             return ["Report cancelled."]
-        
+
         if self.state == State.REPORT_START:
-            reply =  "Thank you for starting the reporting process. "
+            reply = "Thank you for starting the reporting process. "
             reply += "Say `help` at any time for more information.\n\n"
             reply += "Please copy paste the link to the message you want to report.\n"
             reply += "You can obtain this link by right-clicking the message and clicking `Copy Message Link`."
             self.state = State.AWAITING_MESSAGE
             return [reply]
-        
+
         if self.state == State.AWAITING_MESSAGE:
             # Parse out the three ID strings from the message link
             m = re.search('/(\d+)/(\d+)/(\d+)', message.content)
@@ -67,6 +73,7 @@ class Report:
             if not channel:
                 return ["It seems this channel was deleted or never existed. Please try again or say `cancel` to cancel."]
             try:
+                self.report_message_link = message.content
                 message = await channel.fetch_message(int(m.group(3)))
                 self.report_message = message
             except discord.errors.NotFound:
@@ -74,7 +81,8 @@ class Report:
 
             # Here we've found the message - it's up to you to decide what to do next!
             self.state = State.MESSAGE_IDENTIFIED
-            reply = "I found this message: ```" + message.author.name + ": " + message.content + "```\n"
+            reply = "I found this message: ```" + \
+                message.author.name + ": " + message.content + "```\n"
             reply += "Select your reason for reporting this message:\n"
             reply += f"  `{Report.SPAM_KEYWORD}`\n"
             reply += f"  `{Report.OFFENSIVE_KEYWORD}`\n"
@@ -82,7 +90,7 @@ class Report:
             reply += f"  `{Report.ILLEGAL_KEYWORD}`\n"
             reply += f"  `{Report.DANGER_KEYWORD}`\n"
             return [reply]
-        
+
         if self.state == State.MESSAGE_IDENTIFIED:
             if (Report.SPAM_KEYWORD in message.content):
                 self.state = State.REPORT_COMPLETE
@@ -110,18 +118,23 @@ class Report:
                 await self.send_mod_message(f"{Report.DANGER_KEYWORD}")
                 return ["Thank you for reporting. We take threats to people’s safety very seriously and our moderation team will review this report. If you believe you are in immediate danger, you should also contact local law enforcement."]
             return ["Wrong input. Please select the reason again."]
-        
+
         if self.state == State.SELECT_HARASSMENT:
             replies = []
-            keywords = [Report.BULLYING_KEYWORD, Report.UNWANTED_SEXUAL_KEYWORD, Report.PRIVITE_KEYWORD, Report.HATE_SPEECH_KEYWORD]
-            harass_type = next((kw for kw in keywords if kw in message.content), "")
-            if (len(harass_type)>0):
+            keywords = [Report.BULLYING_KEYWORD, Report.UNWANTED_SEXUAL_KEYWORD,
+                        Report.PRIVITE_KEYWORD, Report.HATE_SPEECH_KEYWORD]
+            harass_type = next(
+                (kw for kw in keywords if kw in message.content), "")
+            if (len(harass_type) > 0):
                 self.report_flow += f" -> {harass_type}"
-                replies.append("Thank you for reporting. We will investigate to determine whether this content warrants removal and/or referral to law enforcement.")
-                replies.append("Would you like to hide messages from this sender (Reply `Yes`/`No`)? They will not know this has happened.")
+                replies.append(
+                    "Thank you for reporting. We will investigate to determine whether this content warrants removal and/or referral to law enforcement.")
+                replies.append(
+                    "Would you like to hide messages from this sender (Reply `Yes`/`No`)? They will not know this has happened.")
                 self.state = State.ASK_TO_BLOCK_SENDER
             else:
-                replies.append("Wrong input. Please select the type of harassment again.")
+                replies.append(
+                    "Wrong input. Please select the type of harassment again.")
             return replies
 
         if self.state == State.ASK_TO_BLOCK_SENDER:
@@ -129,23 +142,21 @@ class Report:
             if ("y" in message.content.lower()):
                 self.report_flow += f" -> block sender"
                 await self.send_mod_message(self.report_flow)
-                return ["This sender is blocked! (simulated blocking)"]
+                return ["This sender is blocked! (simulated blocking)\n Thank you for reporting. We will investigate to determine whether this content warrants removal and/or referral to law enforcement. If you would like, refer to the mental health resources below: https://covid19.ca.gov/resources-for-emotional-support-and-well-being/ "]
             else:
                 self.report_flow += f" -> not block sender"
                 await self.send_mod_message(self.report_flow)
-                return ["You selected not to block this sender."]
+                return ["Thank you for reporting. We will investigate to determine whether this content warrants removal and/or referral to law enforcement. \nIf you would like, refer to the mental health resources below: https://covid19.ca.gov/resources-for-emotional-support-and-well-being/"]
         return []
 
     async def send_mod_message(self, report_metadata):
-        await self.mod_channel.send(f'Reported message:\n{self.report_message.author.name}: "{self.report_message.content}"')
-        await self.mod_channel.send(f'Report Flow: `{report_metadata}`')
+        mod_message = OrderedDict()
+        mod_message['reporter'] = self.reporter_id
+        mod_message['author'] = self.report_message.author.name
+        mod_message['message'] = self.report_message.content
+        mod_message['link'] = self.report_message_link
+        mod_message['metadata'] = f'Report Flow is `{report_metadata}`'
+        await self.mod_channel.send(formatter.format_dict_to_str(mod_message))
 
     def report_complete(self):
         return self.state == State.REPORT_COMPLETE
-    
-
-    
-
-
-    
-

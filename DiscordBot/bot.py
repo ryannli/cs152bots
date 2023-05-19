@@ -6,10 +6,12 @@ import json
 import logging
 import re
 import requests
+import formatter 
 from report import Report
 from review import Review
 import pdb
 import profanity_check
+from collections import OrderedDict
 
 # Set up logging to the console
 logger = logging.getLogger('discord')
@@ -106,8 +108,14 @@ class ModBot(discord.Client):
             # Ambigious messages need to be reviewed. "I hate that" is an example of such a message.
             elif (scores > 0.4):
                 mod_channel = self.mod_channels[message.guild.id]
-                await mod_channel.send(f'Forwarded message:\n{message.author.name}: "{message.content}"')
-                await mod_channel.send(self.code_format("{:.2f}".format(scores)))
+                mod_message = OrderedDict()
+                mod_message['reporter'] = "SYSTEM AUTOMATIC"
+                mod_message['author'] = message.author.name
+                mod_message['message'] = message.content
+                mod_message['link'] = message.jump_url
+                mod_message['metadata'] = self.code_format("{:.2f}".format(scores))
+                
+                await mod_channel.send(formatter.format_dict_to_str(mod_message))
 
             await self.report_flow(message)
         
@@ -118,6 +126,7 @@ class ModBot(discord.Client):
             if message.author.id not in self.mods:
                 print(f"{message.author.name} is not a moderator. Their message was deleted.")
                 await message.delete()
+                await message.channel.send(f"{message.author.name} is not a moderator. Their message was deleted.")
                 return
             
             author_id = message.author.id
@@ -165,7 +174,7 @@ class ModBot(discord.Client):
 
         # If we don't currently have an active report for this user, add one
         if author_id not in self.reports:
-            self.reports[author_id] = Report(self, self.single_mod_channel)
+            self.reports[author_id] = Report(self, self.single_mod_channel, author_id)
 
         # Let the report class handle this message; forward all the messages it returns to us
         responses = await self.reports[author_id].handle_message(message)
@@ -190,7 +199,7 @@ class ModBot(discord.Client):
         evaluated, insert your code here for formatting the string to be 
         shown in the mod channel. 
         '''
-        return "profanity_check score: '" + text + "'"
+        return "profanity_check score is " + text
 
 
 client = ModBot()
