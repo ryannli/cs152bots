@@ -94,11 +94,13 @@ class Report:
         if self.state == State.MESSAGE_IDENTIFIED:
             if (Report.SPAM_KEYWORD in message.content):
                 self.state = State.REPORT_COMPLETE
-                await self.send_mod_message(f"{Report.SPAM_KEYWORD}")
+                self.report_flow += Report.SPAM_KEYWORD
+                await self.send_mod_message()
                 return ["Thank you for helping to keep our platform safe. We will investigate this report. "]
             if (Report.OFFENSIVE_KEYWORD in message.content):
                 self.state = State.REPORT_COMPLETE
-                await self.send_mod_message(f"{Report.OFFENSIVE_KEYWORD}")
+                self.report_flow += Report.OFFENSIVE_KEYWORD
+                await self.send_mod_message()
                 return ["Thank you for reporting. We will investigate to determine whether this content violates our policies. "]
             if (Report.HARASSMENT_KEYWORD in message.content):
                 self.state = State.SELECT_HARASSMENT
@@ -111,11 +113,13 @@ class Report:
                 return [reply]
             if (Report.ILLEGAL_KEYWORD in message.content):
                 self.state = State.REPORT_COMPLETE
-                await self.send_mod_message(f"{Report.ILLEGAL_KEYWORD}")
+                self.report_flow += Report.ILLEGAL_KEYWORD
+                await self.send_mod_message()
                 return ["Thank you for reporting. We will investigate to determine whether this content warrants removal and/or referral to law enforcement. "]
             if (Report.DANGER_KEYWORD in message.content):
                 self.state = State.REPORT_COMPLETE
-                await self.send_mod_message(f"{Report.DANGER_KEYWORD}")
+                self.report_flow += Report.DANGER_KEYWORD
+                await self.send_mod_message()
                 return ["Thank you for reporting. We take threats to people’s safety very seriously and our moderation team will review this report. If you believe you are in immediate danger, you should also contact local law enforcement."]
             return ["Wrong input. Please select the reason again."]
 
@@ -141,22 +145,26 @@ class Report:
             self.state = State.REPORT_COMPLETE
             if ("y" in message.content.lower()):
                 self.report_flow += f" -> block sender"
-                await self.send_mod_message(self.report_flow)
+                await self.send_mod_message()
                 return ["This sender is blocked! (simulated blocking)\n Thank you for reporting. We will investigate to determine whether this content warrants removal and/or referral to law enforcement. If you would like, refer to the mental health resources below: https://covid19.ca.gov/resources-for-emotional-support-and-well-being/ "]
             else:
                 self.report_flow += f" -> not block sender"
-                await self.send_mod_message(self.report_flow)
+                await self.send_mod_message()
                 return ["Thank you for reporting. We will investigate to determine whether this content warrants removal and/or referral to law enforcement. \nIf you would like, refer to the mental health resources below: https://covid19.ca.gov/resources-for-emotional-support-and-well-being/"]
         return []
 
-    async def send_mod_message(self, report_metadata):
+    async def send_mod_message(self):
+        mod_message = self.get_report_information()
+        await self.mod_channel.send(formatter.format_dict_to_str(mod_message))
+
+    def get_report_information(self):
         mod_message = OrderedDict()
         mod_message['reporter'] = self.reporter_id
         mod_message['author'] = self.report_message.author.id
         mod_message['message'] = self.report_message.content
         mod_message['link'] = self.report_message_link
-        mod_message['metadata'] = f'Report Flow is `{report_metadata}`'
-        await self.mod_channel.send(formatter.format_dict_to_str(mod_message))
+        mod_message['metadata'] = f'Report Flow: `{self.report_flow}`'
+        return mod_message
 
     def report_complete(self):
         return self.state == State.REPORT_COMPLETE
