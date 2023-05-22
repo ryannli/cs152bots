@@ -152,7 +152,7 @@ class Report:
     async def send_mod_message(self, report_metadata):
         mod_message = OrderedDict()
         mod_message['reporter'] = self.reporter_id
-        mod_message['author'] = self.report_message.author.name
+        mod_message['author'] = self.report_message.author.id
         mod_message['message'] = self.report_message.content
         mod_message['link'] = self.report_message_link
         mod_message['metadata'] = f'Report Flow is `{report_metadata}`'
