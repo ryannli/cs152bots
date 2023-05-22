@@ -41,6 +41,7 @@ class Report:
         self.reporter_id = reporter_id
         self.mod_channel = mod_channel
         self.report_flow = ""
+        self.report_canceled = False
 
     async def handle_message(self, message):
         '''
@@ -51,6 +52,7 @@ class Report:
 
         if message.content == self.CANCEL_KEYWORD:
             self.state = State.REPORT_COMPLETE
+            self.report_was_canceled = True
             return ["Report cancelled."]
 
         if self.state == State.REPORT_START:
@@ -165,6 +167,9 @@ class Report:
         mod_message['link'] = self.report_message_link
         mod_message['metadata'] = f'Report Flow is `{self.report_flow}`'
         return mod_message
+    
+    def report_was_canceled(self):
+        return self.report_canceled
 
     def report_complete(self):
         return self.state == State.REPORT_COMPLETE
