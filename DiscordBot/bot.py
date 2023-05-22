@@ -98,7 +98,7 @@ class ModBot(discord.Client):
         # to the moderator channel for review.
         if message.channel.name == f'group-{self.group_num}':
 
-            scores = self.eval_text(message.content)
+            scores = self.eval_text(self.sanitize_malicious_input(message.content))
             
             # Blatantly harmful messages don't need to be reviewed. "fuck you" is an example of such a message.
             if (scores > 0.95):
@@ -184,7 +184,27 @@ class ModBot(discord.Client):
         # If the report is complete or cancelled, remove it from our map
         if self.reports[author_id].report_complete():
             self.reports.pop(author_id)
-    
+
+    def sanitize_malicious_input(self, raw_message):
+        '''
+        There are alot of ways that people can bypass automatic detection. This is an attempt to limit some of those
+        ways. For example, people can intentionally mispell words, add random spacing between characters, etc...
+        '''
+
+        # handle words with malicious spacing between -> 'f u   c k' = 'fuck'
+        raw_message_single_spaces = re.sub(' +', ' ', raw_message)
+
+        all_single_characters = True
+        for word in raw_message_single_spaces.split(" "):
+            if len(word) > 1:
+                all_single_characters = False
+
+        if all_single_characters:
+            raw_message_no_spaces = re.sub(' +', '', raw_message)
+            return raw_message_no_spaces
+
+        return raw_message
+
     def eval_text(self, message):
         ''''
         TODO: Once you know how you want to evaluate messages in your channel, 
