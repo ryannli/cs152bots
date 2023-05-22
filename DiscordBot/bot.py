@@ -39,7 +39,7 @@ class ModBot(discord.Client):
         self.mod_channels = {} # Map from guild to the mod channel id for that guild
         self.reports = {} # Map from user IDs to the state of their report
         self.reviews = {} # Map from user IDs to the state of their reviews
-        self.mods = [1029345335748857917] # user IDs that are allowed to post / review messages in mod channel. 3q
+        self.mods = [1029345335748857917, 811498139017412608] # user IDs that are allowed to post / review messages in mod channel. 3q
 
     async def on_ready(self):
         print(f'{self.user.name} has connected to Discord! It is these guilds:')
