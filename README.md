@@ -9,6 +9,7 @@ python3 -m pip install requests
 python3 -m pip install discord.py
 python3 -m pip install alt-profanity-check
 python3 -m pip install scipy
+python3 -m pip install editdistance
 ```
 If there are errors from scipy, try uninstall it first `python3 -m pip uninstall scipy` and then reinstall `python3 -m pip install scipy`. 
 

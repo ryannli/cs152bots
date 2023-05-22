@@ -7,6 +7,7 @@ import logging
 import re
 import requests
 import formatter 
+import editdistance
 from report import Report
 from review import Review
 import pdb
@@ -29,6 +30,12 @@ with open(token_path) as f:
     tokens = json.load(f)
     discord_token = tokens['discord']
 
+banned_words_path = 'data/badwords.txt'
+
+with open(banned_words_path) as f:
+    banned_words = set()
+    for line in f:
+        banned_words.add(line.strip())
 
 class ModBot(discord.Client):
     def __init__(self): 
@@ -99,7 +106,7 @@ class ModBot(discord.Client):
         if message.channel.name == f'group-{self.group_num}':
 
             scores = self.eval_text(self.sanitize_malicious_input(message.content))
-            
+
             # Blatantly harmful messages don't need to be reviewed. "fuck you" is an example of such a message.
             if (scores > 0.95):
                 await message.delete()
@@ -202,6 +209,13 @@ class ModBot(discord.Client):
         if all_single_characters:
             raw_message_no_spaces = re.sub(' +', '', raw_message)
             return raw_message_no_spaces
+
+        # handle words that are intentionally mispelled
+        for word in raw_message_single_spaces.split(" "):
+            for banned_word in banned_words:
+                if editdistance.eval(word, banned_word) <= 1:
+                    # fuk you man -> fuck -> triggers automatic detection of sentence
+                    return banned_word
 
         return raw_message
 
