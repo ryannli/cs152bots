@@ -3,6 +3,7 @@
 from enum import Enum, auto
 import discord
 import formatter
+from collections import OrderedDict
 import re
 
 class State(Enum):
@@ -27,6 +28,7 @@ class Review:
         self.reported_message = None
         self.review_flow = ""
         self.message_info = None
+        self.valid_report = None
 
     async def handle_message(self, message):
         if message.content == self.CANCEL_KEYWORD:
@@ -95,35 +97,49 @@ class Review:
                 reply += f"  `A: Content does not violate policies.`\n"
                 reply += f"  `B: Content does violate policies.`\n"
                 return [reply]
+
+        if self.state == State.CONTENT_IS_ALLOWED:
+            self.review_flow += "content is allowed, check for adverserial reporting"
+            self.state = State.REVIEW_COMPLETED
+            self.valid_report = False
+            return []
+        
         if self.state == State.CONTENT_IS_NOT_ALLOWED:
             self.review_flow += "author must be banned and post removed ->"
             self.state = State.AWAITING_IMMINENT_DANGER_MESSAGE
+            self.valid_report = True
             
             reply = "Should local authorities be called?\n"
             reply += f"  `Y: Content is illegal or threatens imminent harm.`\n"
             reply += f"  `N: Content is not illegal and does not threaten imminent harm.`\n"
             return [reply]
-        if self.state == State.CONTENT_IS_ALLOWED:
-            self.review_flow += "content is allowed, check for adverserial reporting"
-            self.state = State.REVIEW_COMPLETED
-            return [self.message_info]
-        
+
         # After content has been deemed to go against policies, need to make sure
         # that serious threats and imminent danger to people are reported to police.
         if self.state == State.AWAITING_IMMINENT_DANGER_MESSAGE:
             if 'y' in message.content.lower():
                 self.state = State.REVIEW_COMPLETED
                 self.review_flow += "police should be contacted"
-                return [self.message_info]
+                return []
             if 'n' in message.content.lower():
                 self.state = State.REVIEW_COMPLETED
                 self.review_flow += "police should not be contacted"
-                return [self.message_info]
+                return []
         
         return ["Wrong input. Please select the reason again."]
     
     def review_complete(self):
         return self.state == State.REVIEW_COMPLETED
+    
+    def get_review_information(self):
+        review_information = OrderedDict()
+        review_information['reporter'] = self.message_info['reporter']
+        review_information['author'] = self.message_info['author']
+        review_information['message'] = self.message_info['message']
+        review_information['link'] = self.message_info['link']
+        review_information['metadata'] = self.review_flow_to_string()
+        review_information['violated'] = self.valid_report
+        return review_information
     
     def review_flow_to_string(self):
         # The review_flow isn't complete if the review was canceled, rather then completed.
