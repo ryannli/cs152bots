@@ -2,15 +2,17 @@
 
 from enum import Enum, auto
 import discord
+import formatter
 import re
 
 class State(Enum):
     REVIEW_START = auto()
     AWAITING_MESSAGE = auto()
     MESSAGE_IDENTIFIED = auto()
-    CONTENT_IS_NOT_HARASSMENT = auto()
-    CONTENT_IS_MAYBE_HARASSMENT = auto()
-    CONTENT_IS_HARASSMENT = auto()
+    CONTENT_IS_ALLOWED = auto()
+    CONTENT_IS_MAYBE_ALLOWED = auto()
+    CONTENT_IS_NOT_ALLOWED = auto()
+    AWAITING_IMMINENT_DANGER_MESSAGE = auto()
     REVIEW_COMPLETED = auto()
 
 class Review:
@@ -24,6 +26,7 @@ class Review:
         self.auto_reported = None
         self.reported_message = None
         self.review_flow = ""
+        self.message_info = None
 
     async def handle_message(self, message):
         if message.content == self.CANCEL_KEYWORD:
@@ -57,47 +60,65 @@ class Review:
             
             self.state = State.MESSAGE_IDENTIFIED
             self.review_flow += "review has been started ->"
-            reply = "I found this message: ```" + message.author.name + ": " + message.content + "```\n"
+            self.message_info = formatter.unformat_str_to_dict(message.content)
+
+            reply = "I found this message: ```" + self.message_info['author'] + ": " + self.message_info['message'] + "```\n"
             reply += "Please make a determination below:\n"
-            reply += f"  `1: Content is not harassment and does not violate policies.`\n"
-            reply += f"  `2: Content might be harassment / violate policies.`\n"
-            reply += f"  `3: Content is harassment and does violate policies.`\n"
+            reply += f"  `1: Content does not violate policies.`\n"
+            reply += f"  `2: Content might violate policies.`\n"
+            reply += f"  `3: Content does violate policies.`\n"
             return [reply]
         
         if self.state == State.MESSAGE_IDENTIFIED:
             if '1' in message.content:
-                self.review_flow += "reviewer #1 says content is not harassment ->"
-                self.state = State.CONTENT_IS_NOT_HARASSMENT
+                self.review_flow += "reviewer #1 says content is allowed ->"
+                self.state = State.CONTENT_IS_ALLOWED
             if '2' in message.content:
                 self.review_flow += "reviewer #1 is unsure about content ->"
-                self.state = State.CONTENT_IS_MAYBE_HARASSMENT
+                self.state = State.CONTENT_IS_MAYBE_ALLOWED
             if '3' in message.content:
-                self.review_flow += "review #1 says content is harassment ->"
-                self.state = State.CONTENT_IS_HARASSMENT
+                self.review_flow += "review #1 says content is not allowed ->"
+                self.state = State.CONTENT_IS_NOT_ALLOWED
 
-        if self.state == State.CONTENT_IS_MAYBE_HARASSMENT:
+        if self.state == State.CONTENT_IS_MAYBE_ALLOWED:
             if 'reviewer #2 is asked their opinion' in self.review_flow:
                 if 'a' in message.content.lower():
-                    self.review_flow += "reviewer #2 says content is not harassment ->"
-                    self.state = State.CONTENT_IS_NOT_HARASSMENT
+                    self.review_flow += "reviewer #2 says content is allowed ->"
+                    self.state = State.CONTENT_IS_ALLOWED
                 if 'b' in message.content.lower():
-                    self.review_flow += "reviewer #2 says content is harassment ->"
-                    self.state = State.CONTENT_IS_HARASSMENT
+                    self.review_flow += "reviewer #2 says content is not allowed ->"
+                    self.state = State.CONTENT_IS_NOT_ALLOWED
             else:
                 self.review_flow += "reviewer #2 is asked their opinion on uncertain content ->"
                 reply = "Please contact a team member and let them review the post."
                 reply += "Please enter their determination below:\n"
-                reply += f"  `A: Content is not harassment and does not violate policies.`\n"
-                reply += f"  `B: Content is harassment and does violate policies.`\n"
+                reply += f"  `A: Content does not violate policies.`\n"
+                reply += f"  `B: Content does violate policies.`\n"
                 return [reply]
-        if self.state == State.CONTENT_IS_HARASSMENT:
-            self.review_flow += "author must be banned and post removed"
+        if self.state == State.CONTENT_IS_NOT_ALLOWED:
+            self.review_flow += "author must be banned and post removed ->"
+            self.state = State.AWAITING_IMMINENT_DANGER_MESSAGE
+            
+            reply = "Should local authorities be called?\n"
+            reply += f"  `Y: Content is illegal or threatens imminent harm.`\n"
+            reply += f"  `N: Content is not illegal and does not threaten imminent harm.`\n"
+            return [reply]
+        if self.state == State.CONTENT_IS_ALLOWED:
+            self.review_flow += "content is allowed, check for adverserial reporting"
             self.state = State.REVIEW_COMPLETED
-            return [self.reported_message]
-        if self.state == State.CONTENT_IS_NOT_HARASSMENT:
-            self.review_flow += "content is not harassment, check for adverserial reporting"
-            self.state = State.REVIEW_COMPLETED
-            return [self.reported_message]
+            return [self.message_info]
+        
+        # After content has been deemed to go against policies, need to make sure
+        # that serious threats and imminent danger to people are reported to police.
+        if self.state == State.AWAITING_IMMINENT_DANGER_MESSAGE:
+            if 'y' in message.content.lower():
+                self.state = State.REVIEW_COMPLETED
+                self.review_flow += "police should be contacted"
+                return [self.message_info]
+            if 'n' in message.content.lower():
+                self.state = State.REVIEW_COMPLETED
+                self.review_flow += "police should not be contacted"
+                return [self.message_info]
         
         return ["Wrong input. Please select the reason again."]
     
@@ -109,7 +130,7 @@ class Review:
         if self.review_flow.endswith("->"):
             return "Review canceled."
         parts = self.review_flow.split("->")
-        reply =  "Your review of the following message is complete: ```" + self.reported_message.content + "```\n"
+        reply =  "Your review of the following message is complete: ```" + self.message_info['author'] + ": " + self.message_info['message'] + "```\n"
         step = 1
         for part in parts:
             reply += f"{step}:  `{part}`\n"
