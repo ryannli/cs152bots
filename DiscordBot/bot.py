@@ -48,10 +48,11 @@ class ModBot(discord.Client):
         self.inprogress_reports = {} # Map from user IDs to the state of their in-progress report
         self.inprogress_reviews = {} # Map from user IDs to the state of their in-progress reviews
 
-        self.completed_reports = {} # Map from user IDs to all completed reports they have started
-        self.completed_reviews = {} # Map from user IDs to all completed reviews they have started
+        self.completed_reports = [] # All completed reports
+        self.completed_reviews = [] # All completed reviews
 
-        self.report_outcomes = {} # Map the status of completed reports to their review outcome [ALLOWED vs BANNED]
+        self.banned_reporters = [] # All people banned due to making false reports
+        self.banned_posters = [] # All people banned due to violating content policies
 
         self.mods = [1029345335748857917, 811498139017412608] # user IDs that are allowed to post / review messages in mod channel. 3q
 
@@ -87,30 +88,39 @@ class ModBot(discord.Client):
         
         # For development purposes. Write 'debug' to print out the state of attributes witihn bot.py
         if message.content == 'debug':
-            print("In Status Reports:")
-            for report in self.inprogress_reports:
-                print(report)
+            print()
+            print("IN STATUS REPORTS -----------------------------------")
+            for id in self.inprogress_reports:
+                print(f"ID Of Reporter: {id}")
+                print(f"Pending Report: {self.inprogress_reports[id]}")
             print()
 
-            print("In Status Reviews:")
-            for review in self.inprogress_reviews:
-                print(review)
+            print("IN STATUS REVIEWS ----------------------------------")
+            for id in self.inprogress_reviews:
+                print(f"ID Of Reviewer: {id}")
+                print(f"Pending Review: {self.inprogress_reviews[id]}")
             print()
 
-            print("Completed reports:")
+            print("COMPLETED REPORTS ----------------------------------")
             for report in self.completed_reports:
                 print(report)
             print()
 
-            print("Completed reviews:")
+            print("COMPLETED REVIEWS ----------------------------------")
             for review in self.completed_reviews:
                 print(review)
             print()
 
-            print("Report Outcomes")
-            print(self.report_outcomes)
+            print("BANNED DUE TO FALSE REPORTS ----------------------")
+            for id in self.banned_reporters:
+                print(id)
             print()
-            
+
+            print("BANNED DUE TO CONTENT ----------------------------")
+            for id in self.banned_posters:
+                print(id)
+            print()
+
             await message.delete()
             return
 
@@ -136,30 +146,21 @@ class ModBot(discord.Client):
         print(f"The discord bot has detected a new message from {message.author.name} in {message.guild.name}")
         print(f"The message content: '{message.content}' \n")
 
+        if message.author.id in self.banned_posters:
+            await message.delete()
+            await message.channel.send(f"{message.author.name} is banned due to violating content policies.")
+            return
+
+        if message.author.id in self.banned_reporters:
+            await message.delete()
+            await message.channel.send(f"{message.author.name} is banned due to making false reports.")
+            return
+
         # Anyone can post within this channel. Note that messages in this channel can be 
         # manually or automatically reported. Once reported, those messages are forwarded
         # to the moderator channel for review.
         if message.channel.name == f'group-{self.group_num}':
-
-            scores = self.eval_text(self.sanitize_malicious_input(message.content))
-
-            # Blatantly harmful messages don't need to be reviewed. "fuck you" is an example of such a message.
-            if (scores > 0.95):
-                await message.delete()
-                await message.channel.send(f'Deleted offensive message from {message.author.name}. Please be respectful for community guidelines.')
-
-            # Ambigious messages need to be reviewed. "I hate that" is an example of such a message.
-            elif (scores > 0.4):
-                mod_channel = self.mod_channels[message.guild.id]
-                mod_message = OrderedDict()
-                mod_message['reporter'] = "SYSTEM AUTOMATIC"
-                mod_message['author'] = message.author.name
-                mod_message['message'] = message.content
-                mod_message['link'] = message.jump_url
-                mod_message['metadata'] = self.code_format("{:.2f}".format(scores))
-                
-                await mod_channel.send(formatter.format_dict_to_str(mod_message))
-
+            await self.automatic_detection_flow(message)
             await self.report_flow(message)
         
         # Only mods can post within this channel. Note that besides the messages posted by mods,
@@ -172,35 +173,104 @@ class ModBot(discord.Client):
                 await message.channel.send(f"{message.author.name} is not a moderator. Their message was deleted.")
                 return
             
-            author_id = message.author.id
-            responses = []
+            await self.review_flow(message)
+            
+            # If a review process was completed, we can detect a user making false reports.
+            # (user has made several reports, which all have been deemed as not breaking content policies)
+            self.check_false_reports()
 
-            # Only respond to messages if they're part of a review flow
-            if author_id not in self.inprogress_reviews and not message.content.startswith(Review.START_KEYWORD):
+            # If a review process was compelted, we can detect a user with multiple reports against him
+            # (user has repeatedly posted content which have been deemed to break content policies).
+            self.check_past_violations()
+
+    async def review_flow(self, message):
+        ''''
+        Flow responsible for the review process (in mod channel).
+        '''
+
+        # Handle a help message
+        if message.content == Review.HELP_KEYWORD:
+            reply =  "Use the `review` command to begin the review process.\n"
+            reply += "Use the `cancel` command to cancel the review process.\n"
+            await message.channel.send(reply)
+            return
+    
+        author_id = message.author.id
+        responses = []
+
+        # Only respond to messages if they're part of a review flow
+        if author_id not in self.inprogress_reviews and not message.content.startswith(Review.START_KEYWORD):
+            return
+
+        # If we don't currently have an active review for this user, add one
+        if author_id not in self.inprogress_reviews:
+            self.inprogress_reviews[author_id] = Review(self)
+
+        # Let the moderator class handle this message; forward all the messages it returns to us
+        responses = await self.inprogress_reviews[author_id].handle_message(message)
+
+        if self.inprogress_reviews[author_id].review_complete():
+            review_information = self.inprogress_reviews[author_id].get_review_information()
+            review_flow = review_information['metadata']
+
+            self.inprogress_reviews.pop(author_id)
+            await message.channel.send(review_flow) 
+
+            # If review was canceled, then we don't need to update anything.
+            if 'Review canceled' in review_flow:
                 return
 
-            # If we don't currently have an active review for this user, add one
-            if author_id not in self.inprogress_reviews:
-                self.inprogress_reviews[author_id] = Review(self)
+            self.completed_reviews.append(review_information)
+        else: 
+            for r in responses:
+                await message.channel.send(r)
 
-            # Let the moderator class handle this message; forward all the messages it returns to us
-            responses = await self.inprogress_reviews[author_id].handle_message(message)
+    def check_false_reports(self):
+        ''''
+        Users who have made 3+ false reports need to be banned from the server. 
+        '''
+        user_id_to_false_reports = {}
+        for review in self.completed_reviews:
+            if not review['violated']:
+                reporter_id = review['reporter']
 
-            # Note that the final response is just the message that was reviewed.
-            # Thus, we can't print out the message object, we need to print out the review flow.
-            if self.inprogress_reviews[author_id].review_complete():
-                review_flow = self.inprogress_reviews[author_id].review_flow_to_string()
+                if reporter_id not in user_id_to_false_reports:
+                    user_id_to_false_reports[reporter_id] = 0
 
-                # We only want to send a review flow that was completed (not one that was partially completed, but
-                # then the user canceled the review).
-                if review_flow:
-                    await message.channel.send(review_flow)   
-                self.inprogress_reviews.pop(author_id)
-            else: 
-                for r in responses:
-                    await message.channel.send(r)
+                user_id_to_false_reports[reporter_id] += 1
+
+        for user_id in user_id_to_false_reports:
+            if user_id_to_false_reports[user_id] >= 3:
+                if user_id not in self.banned_reporters:
+                    self.banned_reporters.append(int(user_id))
+                    print(f"{user_id} has made 3+ false reports. They are banned.\n")
+
+    def check_past_violations(self):
+        ''''
+        Users who have made 3+ posts that violated content policies need to be banned from the server.
+        '''
+        user_id_to_true_reports = {}
+        for review in self.completed_reviews:
+            if review['violated']:
+                author_id = review['author']
+
+                if author_id not in user_id_to_true_reports:
+                    user_id_to_true_reports[author_id] = 0
+
+                user_id_to_true_reports[author_id] += 1
+
+        for user_id in user_id_to_true_reports:
+            if user_id_to_true_reports[user_id] >= 3:
+                if user_id not in self.banned_posters:
+                    self.banned_posters.append(int(user_id))
+                    print(f"{user_id} has made 3+ posts that violated content policies. They are banned.\n")
+
 
     async def report_flow(self, message):
+        ''''
+        Flow responsible for the report process (in main channel).
+        '''
+
         # Handle a help message
         if message.content == Report.HELP_KEYWORD:
             reply =  "Use the `report` command to begin the reporting process.\n"
@@ -226,7 +296,37 @@ class ModBot(discord.Client):
 
         # If the report is complete or cancelled, remove it from our map
         if self.inprogress_reports[author_id].report_complete():
+            report_information = self.inprogress_reports[author_id].get_report_information()
+            
+            if not self.inprogress_reports[author_id].report_was_canceled():
+                report_information = self.inprogress_reports[author_id].get_report_information()
+                self.completed_reports.append(report_information)
+            
             self.inprogress_reports.pop(author_id)
+
+    async def automatic_detection_flow(self, message):
+        ''''
+        Flow responsible for detecting harmful messages (automatically).
+        '''
+
+        scores = self.eval_text(self.sanitize_malicious_input(message.content))
+
+        # Blatantly harmful messages don't need to be reviewed. "fuck you" is an example of such a message.
+        if (scores > 0.95):
+            await message.delete()
+            await message.channel.send(f'Deleted offensive message from {message.author.name}. Please be respectful for community guidelines.')
+
+        # Ambigious messages need to be reviewed. "I hate that" is an example of such a message.
+        elif (scores > 0.4):
+            mod_channel = self.mod_channels[message.guild.id]
+            mod_message = OrderedDict()
+            mod_message['reporter'] = "SYSTEM AUTOMATIC"
+            mod_message['author'] = message.author.name
+            mod_message['message'] = message.content
+            mod_message['link'] = message.jump_url
+            mod_message['metadata'] = self.code_format("{:.2f}".format(scores))
+            
+            await mod_channel.send(formatter.format_dict_to_str(mod_message))
 
     def sanitize_malicious_input(self, raw_message):
         '''
