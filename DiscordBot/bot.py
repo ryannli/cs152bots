@@ -44,8 +44,15 @@ class ModBot(discord.Client):
         super().__init__(command_prefix='.', intents=intents)
         self.group_num = None
         self.mod_channels = {} # Map from guild to the mod channel id for that guild
-        self.reports = {} # Map from user IDs to the state of their report
-        self.reviews = {} # Map from user IDs to the state of their reviews
+
+        self.inprogress_reports = {} # Map from user IDs to the state of their in-progress report
+        self.inprogress_reviews = {} # Map from user IDs to the state of their in-progress reviews
+
+        self.completed_reports = {} # Map from user IDs to all completed reports they have started
+        self.completed_reviews = {} # Map from user IDs to all completed reviews they have started
+
+        self.report_outcomes = {} # Map the status of completed reports to their review outcome [ALLOWED vs BANNED]
+
         self.mods = [1029345335748857917, 811498139017412608] # user IDs that are allowed to post / review messages in mod channel. 3q
 
     async def on_ready(self):
@@ -76,6 +83,35 @@ class ModBot(discord.Client):
         '''
         # Ignore messages from the bot 
         if message.author.id == self.user.id:
+            return
+        
+        # For development purposes. Write 'debug' to print out the state of attributes witihn bot.py
+        if message.content == 'debug':
+            print("In Status Reports:")
+            for report in self.inprogress_reports:
+                print(report)
+            print()
+
+            print("In Status Reviews:")
+            for review in self.inprogress_reviews:
+                print(review)
+            print()
+
+            print("Completed reports:")
+            for report in self.completed_reports:
+                print(report)
+            print()
+
+            print("Completed reviews:")
+            for review in self.completed_reviews:
+                print(review)
+            print()
+
+            print("Report Outcomes")
+            print(self.report_outcomes)
+            print()
+            
+            await message.delete()
             return
 
         # Check if this message was sent in a server ("guild") or if it's a DM
@@ -140,26 +176,26 @@ class ModBot(discord.Client):
             responses = []
 
             # Only respond to messages if they're part of a review flow
-            if author_id not in self.reviews and not message.content.startswith(Review.START_KEYWORD):
+            if author_id not in self.inprogress_reviews and not message.content.startswith(Review.START_KEYWORD):
                 return
 
             # If we don't currently have an active review for this user, add one
-            if author_id not in self.reviews:
-                self.reviews[author_id] = Review(self)
+            if author_id not in self.inprogress_reviews:
+                self.inprogress_reviews[author_id] = Review(self)
 
             # Let the moderator class handle this message; forward all the messages it returns to us
-            responses = await self.reviews[author_id].handle_message(message)
+            responses = await self.inprogress_reviews[author_id].handle_message(message)
 
             # Note that the final response is just the message that was reviewed.
             # Thus, we can't print out the message object, we need to print out the review flow.
-            if self.reviews[author_id].review_complete():
-                review_flow = self.reviews[author_id].review_flow_to_string()
+            if self.inprogress_reviews[author_id].review_complete():
+                review_flow = self.inprogress_reviews[author_id].review_flow_to_string()
 
                 # We only want to send a review flow that was completed (not one that was partially completed, but
                 # then the user canceled the review).
                 if review_flow:
                     await message.channel.send(review_flow)   
-                self.reviews.pop(author_id)
+                self.inprogress_reviews.pop(author_id)
             else: 
                 for r in responses:
                     await message.channel.send(r)
@@ -176,21 +212,21 @@ class ModBot(discord.Client):
         responses = []
 
         # Only respond to messages if they're part of a reporting flow
-        if author_id not in self.reports and not message.content.startswith(Report.START_KEYWORD):
+        if author_id not in self.inprogress_reports and not message.content.startswith(Report.START_KEYWORD):
             return
 
         # If we don't currently have an active report for this user, add one
-        if author_id not in self.reports:
-            self.reports[author_id] = Report(self, self.single_mod_channel, author_id)
+        if author_id not in self.inprogress_reports:
+            self.inprogress_reports[author_id] = Report(self, self.single_mod_channel, author_id)
 
         # Let the report class handle this message; forward all the messages it returns to us
-        responses = await self.reports[author_id].handle_message(message)
+        responses = await self.inprogress_reports[author_id].handle_message(message)
         for r in responses:
             await message.channel.send(r)
 
         # If the report is complete or cancelled, remove it from our map
-        if self.reports[author_id].report_complete():
-            self.reports.pop(author_id)
+        if self.inprogress_reports[author_id].report_complete():
+            self.inprogress_reports.pop(author_id)
 
     def sanitize_malicious_input(self, raw_message):
         '''
