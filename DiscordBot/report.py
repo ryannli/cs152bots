@@ -163,7 +163,7 @@ class Report:
         mod_message['author'] = self.report_message.author.id
         mod_message['message'] = self.report_message.content
         mod_message['link'] = self.report_message_link
-        mod_message['metadata'] = f'Report Flow: `{self.report_flow}`'
+        mod_message['metadata'] = f'Report Flow is `{self.report_flow}`'
         return mod_message
 
     def report_complete(self):
