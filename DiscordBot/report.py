@@ -13,6 +13,7 @@ class State(Enum):
     SELECT_SPAM = auto()
     SELECT_OFFENSIVE = auto()
     SELECT_HARASSMENT = auto()
+    ADD_HARASSMENT_DETAILS = auto()
     SELECT_ILLEGAL = auto()
     SELECT_IMMINENT = auto()
     ASK_TO_BLOCK_SENDER = auto()
@@ -42,6 +43,7 @@ class Report:
         self.mod_channel = mod_channel
         self.report_flow = ""
         self.report_canceled = False
+        self.additional_details = None
 
     async def handle_message(self, message):
         '''
@@ -136,13 +138,22 @@ class Report:
                 replies.append(
                     "Thank you for reporting. We will investigate to determine whether this content warrants removal and/or referral to law enforcement.")
                 replies.append(
-                    "Would you like to hide messages from this sender (Reply `Yes`/`No`)? They will not know this has happened.")
-                self.state = State.ASK_TO_BLOCK_SENDER
+                    "Would you like to add a more detailed description of this abuse? (Reply your description or `No`)")
+                self.state = State.ADD_HARASSMENT_DETAILS
             else:
                 replies.append(
                     "Wrong input. Please select the type of harassment again.")
             return replies
 
+        if self.state == State.ADD_HARASSMENT_DETAILS:
+            if ("no" in message.content.lower()):
+                self.report_flow += f" -> not add details"
+            else:
+                self.report_flow += f" -> add details"
+                self.additional_details = message.content
+            self.state = State.ASK_TO_BLOCK_SENDER
+            return ["Would you like to hide messages from this sender (Reply `Yes`/`No`)? They will not know this has happened."]
+        
         if self.state == State.ASK_TO_BLOCK_SENDER:
             self.state = State.REPORT_COMPLETE
             if ("y" in message.content.lower()):
@@ -165,7 +176,10 @@ class Report:
         mod_message['author'] = self.report_message.author.id
         mod_message['message'] = self.report_message.content
         mod_message['link'] = self.report_message_link
-        mod_message['metadata'] = f'Report Flow is `{self.report_flow}`'
+        metadata = f'Report Flow is `{self.report_flow}`'
+        if self.additional_details:
+            metadata += f'\nAdditional details provided by reporter: `{self.additional_details}`'
+        mod_message['metadata'] = metadata
         return mod_message
     
     def report_was_canceled(self):
