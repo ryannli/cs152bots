@@ -321,7 +321,7 @@ class ModBot(discord.Client):
             mod_channel = self.mod_channels[message.guild.id]
             mod_message = OrderedDict()
             mod_message['reporter'] = "SYSTEM AUTOMATIC"
-            mod_message['author'] = message.author.name
+            mod_message['author'] = message.author.id
             mod_message['message'] = message.content
             mod_message['link'] = message.jump_url
             mod_message['metadata'] = self.code_format("{:.2f}".format(scores))
