@@ -167,11 +167,12 @@ class ModBot(discord.Client):
         # this channel will contain all the reported messages that were forwarded either manually
         # or automatically.
         if message.channel.name == f'group-{self.group_num}-mod':
-            if message.author.id not in self.mods:
-                print(f"{message.author.name} is not a moderator. Their message was deleted.")
-                await message.delete()
-                await message.channel.send(f"{message.author.name} is not a moderator. Their message was deleted.")
-                return
+            # Uncommented this if you want to only allow mods to post in this channel
+            # if message.author.id not in self.mods:
+            #     print(f"{message.author.name} is not a moderator. Their message was deleted.")
+            #     await message.delete()
+            #     await message.channel.send(f"{message.author.name} is not a moderator. Their message was deleted.")
+            #     return
             
             await self.review_flow(message)
             
@@ -321,6 +322,7 @@ class ModBot(discord.Client):
             mod_channel = self.mod_channels[message.guild.id]
             mod_message = OrderedDict()
             mod_message['reporter'] = "SYSTEM AUTOMATIC"
+            mod_message['priority'] = 2
             mod_message['author'] = message.author.id
             mod_message['message'] = message.content
             mod_message['link'] = message.jump_url
