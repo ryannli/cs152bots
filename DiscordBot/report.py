@@ -89,43 +89,43 @@ class Report:
             reply = "I found this message: ```" + \
                 message.author.name + ": " + message.content + "```\n"
             reply += "Select your reason for reporting this message:\n"
-            reply += f"  `{Report.SPAM_KEYWORD}`\n"
-            reply += f"  `{Report.OFFENSIVE_KEYWORD}`\n"
-            reply += f"  `{Report.HARASSMENT_KEYWORD}`\n"
-            reply += f"  `{Report.ILLEGAL_KEYWORD}`\n"
-            reply += f"  `{Report.DANGER_KEYWORD}`\n"
+            reply += f"  `1: {Report.SPAM_KEYWORD}`\n"
+            reply += f"  `2: {Report.OFFENSIVE_KEYWORD}`\n"
+            reply += f"  `3: {Report.HARASSMENT_KEYWORD}`\n"
+            reply += f"  `4: {Report.ILLEGAL_KEYWORD}`\n"
+            reply += f"  `5: {Report.DANGER_KEYWORD}`\n"
             return [reply]
 
         if self.state == State.MESSAGE_IDENTIFIED:
-            if (Report.SPAM_KEYWORD in message.content):
+            if ("1" in message.content):
                 self.state = State.REPORT_COMPLETE
                 self.report_flow += Report.SPAM_KEYWORD
                 self.report_priority =  5
                 await self.send_mod_message()
                 return ["Thank you for helping to keep our platform safe. We will investigate this report. "]
-            if (Report.OFFENSIVE_KEYWORD in message.content):
+            if ("2" in message.content):
                 self.state = State.REPORT_COMPLETE
                 self.report_flow += Report.OFFENSIVE_KEYWORD
                 self.report_priority =  4
                 await self.send_mod_message()
                 return ["Thank you for reporting. We will investigate to determine whether this content violates our policies. "]
-            if (Report.HARASSMENT_KEYWORD in message.content):
+            if ("3" in message.content):
                 self.state = State.SELECT_HARASSMENT
                 self.report_flow += f"{Report.HARASSMENT_KEYWORD}"
                 reply = "Thank you for reporting. What type of harassment is this? \n"
-                reply += f"  `{Report.BULLYING_KEYWORD}`\n"
-                reply += f"  `{Report.UNWANTED_SEXUAL_KEYWORD}`\n"
-                reply += f"  `{Report.PRIVITE_KEYWORD}`\n"
-                reply += f"  `{Report.HATE_SPEECH_KEYWORD}`\n"
+                reply += f"  `1: {Report.BULLYING_KEYWORD}`\n"
+                reply += f"  `2: {Report.UNWANTED_SEXUAL_KEYWORD}`\n"
+                reply += f"  `3: {Report.PRIVITE_KEYWORD}`\n"
+                reply += f"  `4: {Report.HATE_SPEECH_KEYWORD}`\n"
                 self.report_priority =  3
                 return [reply]
-            if (Report.ILLEGAL_KEYWORD in message.content):
+            if ("4" in message.content):
                 self.state = State.REPORT_COMPLETE
                 self.report_flow += Report.ILLEGAL_KEYWORD
                 self.report_priority =  1
                 await self.send_mod_message()
                 return ["Thank you for reporting. We will investigate to determine whether this content warrants removal and/or referral to law enforcement. "]
-            if (Report.DANGER_KEYWORD in message.content):
+            if ("5" in message.content):
                 self.state = State.REPORT_COMPLETE
                 self.report_flow += Report.DANGER_KEYWORD
                 self.report_priority =  1
@@ -135,10 +135,10 @@ class Report:
 
         if self.state == State.SELECT_HARASSMENT:
             replies = []
-            keywords = [Report.BULLYING_KEYWORD, Report.UNWANTED_SEXUAL_KEYWORD,
-                        Report.PRIVITE_KEYWORD, Report.HATE_SPEECH_KEYWORD]
+            keywords = {"1": Report.BULLYING_KEYWORD, "2": Report.UNWANTED_SEXUAL_KEYWORD,
+                        "3": Report.PRIVITE_KEYWORD, "4": Report.HATE_SPEECH_KEYWORD}
             harass_type = next(
-                (kw for kw in keywords if kw in message.content), "")
+                (keywords[kw] for kw in keywords if kw in message.content), "")
             if (len(harass_type) > 0):
                 self.report_flow += f" -> {harass_type}"
                 replies.append(
