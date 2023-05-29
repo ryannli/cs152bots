@@ -6,6 +6,7 @@ import json
 import logging
 import re
 import requests
+import openai_utils
 import formatter 
 import editdistance
 from report import Report
@@ -13,6 +14,8 @@ from review import Review
 import pdb
 import profanity_check
 from collections import OrderedDict
+import argparse
+
 
 # Set up logging to the console
 logger = logging.getLogger('discord')
@@ -38,7 +41,7 @@ with open(banned_words_path) as f:
         banned_words.add(line.strip())
 
 class ModBot(discord.Client):
-    def __init__(self): 
+    def __init__(self, use_openai=False): 
         intents = discord.Intents.default()
         intents.message_content = True
         super().__init__(command_prefix='.', intents=intents)
@@ -55,6 +58,7 @@ class ModBot(discord.Client):
         self.banned_posters = [] # All people banned due to violating content policies
 
         self.mods = [1029345335748857917, 811498139017412608] # user IDs that are allowed to post / review messages in mod channel. 3q
+        self.use_openai = use_openai
 
     async def on_ready(self):
         print(f'{self.user.name} has connected to Discord! It is these guilds:')
@@ -305,30 +309,47 @@ class ModBot(discord.Client):
             
             self.inprogress_reports.pop(author_id)
 
+    async def auto_delete_message(self, message):
+        await message.delete()
+        await message.channel.send(f'Deleted offensive message from {message.author.name}. Please be respectful for community guidelines.')
+    async def auto_report_message(self, message, metadata):
+        mod_channel = self.mod_channels[message.guild.id]
+        mod_message = OrderedDict()
+        mod_message['reporter'] = "SYSTEM AUTOMATIC"
+        mod_message['priority'] = 2
+        mod_message['author'] = message.author.id
+        mod_message['message'] = message.content
+        mod_message['link'] = message.jump_url
+        mod_message['metadata'] = metadata
+        await mod_channel.send(formatter.format_dict_to_str(mod_message))
+
     async def automatic_detection_flow(self, message):
         ''''
         Flow responsible for detecting harmful messages (automatically).
         '''
+        # TODO: Cleanup profanity score codings if no longer needed. 
 
-        scores = self.eval_text(self.sanitize_malicious_input(message.content))
+        if self.use_openai:
+            openai_scores = openai_utils.get_openai_dict_scores(message.content)
+            # Number of categories that have a score of at least 4 (scale 1-5)
+            score_at_least_4_count = sum(1 for value in openai_scores.values() if value >= 4)
+            # Number of categories that have a score of at least 3 (scale 1-5)
+            score_at_least_3_count = sum(1 for value in openai_scores.values() if value >= 3)
+            if (score_at_least_4_count >=2):
+                await self.auto_delete_message(message)
+            elif (score_at_least_3_count >= 1):
+                await self.auto_report_message(message, self.openai_score_format(openai_scores))
 
-        # Blatantly harmful messages don't need to be reviewed. "fuck you" is an example of such a message.
-        if (scores > 0.95):
-            await message.delete()
-            await message.channel.send(f'Deleted offensive message from {message.author.name}. Please be respectful for community guidelines.')
+        else:
+            scores = self.get_profanity_score(self.sanitize_malicious_input(message.content))
 
-        # Ambigious messages need to be reviewed. "I hate that" is an example of such a message.
-        elif (scores > 0.4):
-            mod_channel = self.mod_channels[message.guild.id]
-            mod_message = OrderedDict()
-            mod_message['reporter'] = "SYSTEM AUTOMATIC"
-            mod_message['priority'] = 2
-            mod_message['author'] = message.author.id
-            mod_message['message'] = message.content
-            mod_message['link'] = message.jump_url
-            mod_message['metadata'] = self.code_format("{:.2f}".format(scores))
-            
-            await mod_channel.send(formatter.format_dict_to_str(mod_message))
+            # Blatantly harmful messages don't need to be reviewed. "fuck you" is an example of such a message.
+            if (scores > 0.95):
+                await self.auto_delete_message(message)
+
+            # Ambigious messages need to be reviewed. "I hate that" is an example of such a message.
+            elif (scores > 0.4):
+                await self.auto_report_message(message, self.profanity_score_format("{:.2f}".format(scores)))
 
     def sanitize_malicious_input(self, raw_message):
         '''
@@ -357,22 +378,26 @@ class ModBot(discord.Client):
 
         return raw_message
 
-    def eval_text(self, message):
-        ''''
-        TODO: Once you know how you want to evaluate messages in your channel, 
-        insert your code here! This will primarily be used in Milestone 3. 
-        '''
+    def get_profanity_score(self, message):
         return profanity_check.predict_prob([message])[0]
 
     
-    def code_format(self, text):
-        ''''
-        TODO: Once you know how you want to show that a message has been 
-        evaluated, insert your code here for formatting the string to be 
-        shown in the mod channel. 
-        '''
-        return "profanity_check score is " + text
+    def openai_score_format(self, openai_dict):
+        return "OpenAI detected harmful score (scale 1-5) is \n" + formatter.format_dict_to_str(openai_dict)
+    
+    def profanity_score_format(self, text):
+        return "profanity check score is " + text
 
 
-client = ModBot()
-client.run(discord_token)
+def main(args):
+    print("OpenAI flag:", args.openai)
+    client = ModBot(args.openai)
+    client.run(discord_token)
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="discord bot args parser")
+
+    parser.add_argument("-openai", "--openai", type=bool, help="If use OpenAI to automatically detect harmful messages")
+
+    args = parser.parse_args()
+    main(args)
