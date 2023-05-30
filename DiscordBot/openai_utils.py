@@ -2,6 +2,7 @@ import os
 import openai
 import json
 from collections import OrderedDict
+import time
 
 # There should be a file called 'tokens.json' inside the same folder as this file
 token_path = 'tokens.json'
@@ -10,7 +11,8 @@ if not os.path.isfile(token_path):
 with open(token_path) as f:
     # If you get an error here, it means your token is formatted incorrectly. Did you put it in quotes?
     tokens = json.load(f)
-    openai.api_key = tokens['openai']
+    openai.api_key = tokens['openai-key']
+    openai.organization = tokens['openai-org']
 
 def convert_string_to_dict(message):
     result = OrderedDict()
@@ -27,12 +29,19 @@ def convert_string_to_dict(message):
     return result
 
 def get_openai_dict_scores(text):
+    start = time.time()
     response = openai.ChatCompletion.create(
     model="gpt-3.5-turbo",
+    # model="gpt-4",
     messages=[
-    {"role": "system", "content": '''You are a content moderation system. 
+    {"role": "system", "content": ""},
+    {"role": "user", "content": '''You are a content moderation system. 
 
-    Please help to classify if the following text from a web user is any of the following categories. For each category, reply one of 1, 2, 3, 4, 5. 1 means negligible (like "I love you", "it's a cloudy day"). 5 means very severe (like "fuck you", "vegans are super stupid"). 
+    Please classify if the following text from a web user is abusive, harmful and belongs to any of the following categories. For each category, reply one of 1, 2, 3, 4, 5. 
+    1 means negligible level (like "I love you", "it's a cloudy day", "I hate that"). 
+    3 means moderately harmful (like "I hate you").
+    5 means very severe level (like "fuck your family", "vegans should die", "I'll kill you"). 
+    
     Your reply should use the following format and contains all the following categories:
 
     Scam: {SCORE}
@@ -40,15 +49,18 @@ def get_openai_dict_scores(text):
     Harrassment and bullying: {SCORE}
     Harrassment and unwanted sexual content: {SCORE}
     Harrassment and leaking private Information: {SCORE}
-    Harrassment and hate speech: {SCORE}
+    Harrassment and hate speech on certain groups: {SCORE}
     Danger: {SCORE}
     Illegally published content: {SCORE}
     Misinformation: {SCORE}
-    '''},
 
-    {"role": "user", "content": text},
+    User input: 
+    ''' + text},
     ]
     )
+    end = time.time()
+    execution_time = end - start
+    print("Execution time:", execution_time, "seconds")
     message = response['choices'][0]['message']['content']
     print("OpenAI response message debug info: ")
     print(message)

@@ -25,6 +25,11 @@ Run the Discord bot with OpenAI detection
 python3 bot.py --openai=true
 ```
 
+Run the Discord bot with OpenAI detection and debugging mode
+```
+python3 bot.py --openai=true --debug=true
+```
+
 Example for using formatter library:
 ```
 >>> import formatter

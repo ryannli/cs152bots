@@ -41,7 +41,7 @@ with open(banned_words_path) as f:
         banned_words.add(line.strip())
 
 class ModBot(discord.Client):
-    def __init__(self, use_openai=False): 
+    def __init__(self, use_openai=False, debug=False): 
         intents = discord.Intents.default()
         intents.message_content = True
         super().__init__(command_prefix='.', intents=intents)
@@ -59,6 +59,7 @@ class ModBot(discord.Client):
 
         self.mods = [1029345335748857917, 811498139017412608] # user IDs that are allowed to post / review messages in mod channel. 3q
         self.use_openai = use_openai
+        self.debug = debug
 
     async def on_ready(self):
         print(f'{self.user.name} has connected to Discord! It is these guilds:')
@@ -331,6 +332,8 @@ class ModBot(discord.Client):
 
         if self.use_openai:
             openai_scores = openai_utils.get_openai_dict_scores(message.content)
+            if (self.debug):
+                await message.channel.send(f'Debugging Info: Message received as `{message.content}`. {self.openai_score_format(openai_scores)}')
             # Number of categories that have a score of at least 4 (scale 1-5)
             score_at_least_4_count = sum(1 for value in openai_scores.values() if value >= 4)
             # Number of categories that have a score of at least 3 (scale 1-5)
@@ -391,13 +394,15 @@ class ModBot(discord.Client):
 
 def main(args):
     print("OpenAI flag:", args.openai)
-    client = ModBot(args.openai)
+    print("Debug flag:", args.openai)
+    client = ModBot(args.openai, args.debug)
     client.run(discord_token)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="discord bot args parser")
 
     parser.add_argument("-openai", "--openai", type=bool, help="If use OpenAI to automatically detect harmful messages")
+    parser.add_argument("-debug", "--debug", type=bool, help="If use debugging mode. It will send additional messages in Discord")
 
     args = parser.parse_args()
     main(args)
