@@ -361,11 +361,29 @@ class ModBot(discord.Client):
             score_at_least_4_count = sum(1 for value in openai_scores.values() if value >= 4)
             # Number of categories that have a score of at least 3 (scale 1-5)
             score_at_least_3_count = sum(1 for value in openai_scores.values() if value >= 3)
+
+            message_auto_reported = False
+            message_auto_deleted = False
+
             if (score_at_least_4_count >=2):
+                message_auto_deleted = True
                 await self.auto_delete_message(message)
             elif (score_at_least_3_count >= 1):
+                message_auto_reported = True
                 await self.auto_report_message(message, self.openai_score_format(openai_scores))
 
+            # If openAI has not detected any problems that merit auto report or auto deletion, then
+            # double check by also manually checking for malicious spacing and intentional misspellings.
+            if not message_auto_deleted and not message_auto_reported:
+                scores = self.get_profanity_score(self.sanitize_malicious_input(message.content))
+
+                # Blatantly harmful messages don't need to be reviewed. "fuck you" is an example of such a message.
+                if (scores > 0.95):
+                    await self.auto_delete_message(message)
+
+                # Ambigious messages need to be reviewed. "I hate that" is an example of such a message.
+                elif (scores > 0.4):
+                    await self.auto_report_message(message, self.profanity_score_format("{:.2f}".format(scores)))
         else:
             scores = self.get_profanity_score(self.sanitize_malicious_input(message.content))
 
