@@ -384,6 +384,9 @@ class ModBot(discord.Client):
                 # Ambigious messages need to be reviewed. "I hate that" is an example of such a message.
                 elif (scores > 0.4):
                     await self.auto_report_message(message, self.profanity_score_format("{:.2f}".format(scores)))
+        
+        # Do not get rid of this else statement. Worse case scenario, ChatGPT isn't working on the demo day, 
+        # so we are able to turn off the openAI flag and use the checks below for malicious spacing or intentional misspellings.
         else:
             scores = self.get_profanity_score(self.sanitize_malicious_input(message.content))
 
