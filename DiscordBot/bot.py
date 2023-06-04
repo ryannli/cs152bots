@@ -61,6 +61,8 @@ class ModBot(discord.Client):
         self.use_openai = use_openai
         self.debug = debug
 
+        self.regexes_to_ban = [] # Regex list that should not be allowed on the server.
+
     async def on_ready(self):
         print(f'{self.user.name} has connected to Discord! It is these guilds:')
         for guild in self.guilds:
@@ -165,6 +167,13 @@ class ModBot(discord.Client):
         # manually or automatically reported. Once reported, those messages are forwarded
         # to the moderator channel for review.
         if message.channel.name == f'group-{self.group_num}':
+
+            for banned_regex in self.regexes_to_ban:
+                if re.fullmatch(banned_regex, message.content):
+                    await message.channel.send(f"{message.content} is not allowed. It matches a banned regex.\n")
+                    await message.delete()
+                    return
+
             await self.automatic_detection_flow(message)
             await self.report_flow(message)
         
@@ -178,6 +187,20 @@ class ModBot(discord.Client):
             #     await message.delete()
             #     await message.channel.send(f"{message.author.name} is not a moderator. Their message was deleted.")
             #     return
+
+
+            # Mods are able to ban regex words by specifying: BAN: SOMETHING
+            if message.content.startswith("BAN:"):
+                regex_to_ban = message.content[4:]
+
+                try:
+                    pattern = re.compile(regex_to_ban)
+                    self.regexes_to_ban.append(pattern)
+                    reply =  f"The regex '{regex_to_ban}' is no longer allowed on the server.\n"
+                    await message.channel.send(reply)
+                except re.error:
+                    await message.channel.send("Malformated regex")
+                return
             
             await self.review_flow(message)
             
