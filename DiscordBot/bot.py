@@ -361,8 +361,6 @@ class ModBot(discord.Client):
                     await message.channel.send(f'Debugging Info: Message received as `{message.content}`. {self.openai_score_format(openai_scores)}')
                 # Number of categories that have a score of at least 4 (scale 1-5)
                 score_at_least_4_count = sum(1 for value in openai_scores.values() if value >= 4)
-                # Number of categories that have a score of at least 4 (scale 1-5)
-                score_at_least_4_count = sum(1 for value in openai_scores.values() if value >= 4)
 
                 message_auto_reported = False
                 message_auto_deleted = False
