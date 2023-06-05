@@ -361,8 +361,8 @@ class ModBot(discord.Client):
                     await message.channel.send(f'Debugging Info: Message received as `{message.content}`. {self.openai_score_format(openai_scores)}')
                 # Number of categories that have a score of at least 4 (scale 1-5)
                 score_at_least_4_count = sum(1 for value in openai_scores.values() if value >= 4)
-                # Number of categories that have a score of at least 3 (scale 1-5)
-                score_at_least_3_count = sum(1 for value in openai_scores.values() if value >= 3)
+                # Number of categories that have a score of at least 4 (scale 1-5)
+                score_at_least_4_count = sum(1 for value in openai_scores.values() if value >= 4)
 
                 message_auto_reported = False
                 message_auto_deleted = False
@@ -370,7 +370,7 @@ class ModBot(discord.Client):
                 if (score_at_least_4_count >=2):
                     message_auto_deleted = True
                     await self.auto_delete_message(message)
-                elif (score_at_least_3_count >= 1):
+                elif (score_at_least_4_count >= 1):
                     message_auto_reported = True
                     await self.auto_report_message(message, self.openai_score_format(openai_scores))
             
@@ -378,10 +378,9 @@ class ModBot(discord.Client):
                 print("OpenAI failed to generate a response. Resorting to backup systems.\n")
                 exception_occured = True
 
-            # If an error occured with openAI, then go ahead and do the backup checks. Otherwise,
-            # if openAI has ran successfully, but not detected any problems that merit auto report or auto deletion, then
-            # double check by also manually checking for malicious spacing and intentional misspellings.
-            if exception_occured or (not message_auto_deleted and not message_auto_reported):
+            # If an error occured with openAI, then go ahead and do the backup checks.
+            if exception_occured:
+            # if exception_occured or (not message_auto_deleted and not message_auto_reported):
                 scores = self.get_profanity_score(self.sanitize_malicious_input(message.content))
 
                 # Blatantly harmful messages don't need to be reviewed. "fuck you" is an example of such a message.
