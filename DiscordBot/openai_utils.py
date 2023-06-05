@@ -62,6 +62,6 @@ def get_openai_dict_scores(text):
     execution_time = end - start
     print("Execution time:", execution_time, "seconds")
     message = response['choices'][0]['message']['content']
-    print("OpenAI response message debug info: ")
-    print(message)
+    # print("OpenAI response message debug info: ")
+    # print(message)
     return convert_string_to_dict(message)
