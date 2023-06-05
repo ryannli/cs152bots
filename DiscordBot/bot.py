@@ -34,6 +34,7 @@ with open(token_path) as f:
     discord_token = tokens['discord']
 
 banned_words_path = 'data/badwords.txt'
+logging_path = 'logging/log.txt'
 
 with open(banned_words_path) as f:
     banned_words = set()
@@ -250,6 +251,11 @@ class ModBot(discord.Client):
                 return
 
             self.completed_reviews.append(review_information)
+
+            # Add the completed review to the log for later analysis.
+            log_file = open(logging_path, "a")
+            log_file.write(f"{review_information['reporter']}|{review_information['author']}|{review_information['message']}|{review_information['violated']}\n")
+            log_file.close()
         else: 
             for r in responses:
                 await message.channel.send(r)
